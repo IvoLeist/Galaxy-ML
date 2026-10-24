@@ -11,10 +11,13 @@ import collections.abc
 import copy
 import inspect
 import json
+import os
 import random
 import sys
+import uuid
 import warnings
 from abc import ABCMeta
+from datetime import datetime, timezone
 from pathlib import Path
 
 import h5py
@@ -48,6 +51,10 @@ import tensorflow as tf
 
 from . import utils
 from .externals.selene_sdk.utils import compute_score
+
+
+# Root directory used when TensorBoard logging is enabled and no path is set.
+DEFAULT_TENSORBOARD_LOG_DIR = 'logs'
 
 
 __all__ = ('KerasEarlyStopping', 'KerasTensorBoard', 'KerasCSVLogger',
@@ -154,6 +161,104 @@ class KerasLearningRateScheduler(LearningRateScheduler, BaseEstimator):
 
 class KerasTensorBoard(TensorBoard, BaseEstimator):
     pass
+
+
+def _plain_number(value):
+    """Return a Python float for a Keras/TensorFlow numeric value."""
+    if value is None:
+        return None
+    if hasattr(value, 'numpy'):
+        value = value.numpy()
+    return float(value)
+
+
+def _new_tensorboard_run_dir(log_root):
+    """Create a unique run directory under ``log_root``.
+
+    TensorBoard is pointed at the root, so each ``fit`` stays visible
+    without overwriting an earlier run.
+    """
+    root = Path(log_root)
+    root.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+    name = '%s-%s-%s' % (stamp, os.getpid(), uuid.uuid4().hex[:6])
+    run_dir = root / name
+    run_dir.mkdir(parents=False, exist_ok=False)
+    return run_dir
+
+
+class _GalaxyMLTensorBoard(TensorBoard):
+    """Log epoch metrics and the hyperparameters used for one fit."""
+
+    def __init__(self, log_dir, hparams=None, **kwargs):
+        super(_GalaxyMLTensorBoard, self).__init__(
+            log_dir=log_dir,
+            histogram_freq=0,
+            write_graph=True,
+            write_images=False,
+            update_freq='epoch',
+            profile_batch=0,
+            **kwargs)
+        self.hparams = dict(hparams or {})
+
+    def on_train_begin(self, logs=None):
+        super(_GalaxyMLTensorBoard, self).on_train_begin(logs)
+        self._write_hparams()
+
+    def _write_hparams(self):
+        if not self.hparams:
+            return
+        try:
+            from tensorboard.plugins.hparams import api as hp
+        except ImportError:
+            hp = None
+
+        session = {}
+        specs = []
+        with self._train_writer.as_default():
+            for key, value in self.hparams.items():
+                tag = 'hparams/%s' % key
+                if isinstance(value, bool):
+                    tf.summary.scalar(tag, float(value), step=0)
+                    session[key] = bool(value)
+                    if hp is not None:
+                        specs.append(hp.HParam(
+                            key, hp.Discrete([False, True])))
+                elif isinstance(value, (int, float)):
+                    number = float(value)
+                    tf.summary.scalar(tag, number, step=0)
+                    session[key] = number
+                    if hp is not None:
+                        specs.append(hp.HParam(
+                            key, hp.RealInterval(-1e9, 1e9)))
+                else:
+                    text = str(value)
+                    tf.summary.text(tag, text, step=0)
+                    session[key] = text
+                    if hp is not None:
+                        specs.append(hp.HParam(key, hp.Discrete([text])))
+            self._train_writer.flush()
+
+        if hp is None or not specs:
+            return
+        try:
+            with self._train_writer.as_default():
+                hp.hparams_config(
+                    hparams=specs,
+                    metrics=[
+                        hp.Metric('epoch_loss', display_name='loss'),
+                        hp.Metric(
+                            'epoch_learning_rate',
+                            display_name='learning rate'),
+                    ],
+                )
+                hp.hparams(session)
+                self._train_writer.flush()
+        except Exception as exc:
+            warnings.warn(
+                'Could not write TensorBoard hyperparameter summaries: %s'
+                % exc,
+                RuntimeWarning)
 
 
 class KerasRemoteMonitor(RemoteMonitor, BaseEstimator):
@@ -470,6 +575,18 @@ class BaseKerasModel(six.with_metaclass(ABCMeta, BaseEstimator)):
         epoch. If > 0, log device placement
     seed : None or int, default None
         backend random seed
+    tensorboard : bool, default False
+        When True, write TensorBoard event files during ``fit``.
+        Training and validation metrics Keras already computes
+        (loss and compiled metrics such as accuracy) are logged
+        every epoch, along with the learning rate and fit
+        hyperparameters. False leaves training unchanged.
+    tensorboard_log_dir : str or None, default "logs"
+        Root directory for TensorBoard runs. Used only when
+        ``tensorboard`` is True. Each ``fit`` creates a new
+        subdirectory. None or "" uses the environment variable
+        ``GALAXY_ML_TENSORBOARD_LOG_DIR`` when set, otherwise
+        ``"logs"``.
     """
     def __init__(
         self, config, model_type='sequential',
@@ -486,6 +603,7 @@ class BaseKerasModel(six.with_metaclass(ABCMeta, BaseEstimator)):
         epochs=1, batch_size=None, callbacks=None,
         validation_split=0.1, steps_per_epoch=None,
         validation_steps=None, verbose=1, seed=None,
+        tensorboard=False, tensorboard_log_dir=DEFAULT_TENSORBOARD_LOG_DIR,
         **fit_params,
     ):
         self.config = config
@@ -526,6 +644,11 @@ class BaseKerasModel(six.with_metaclass(ABCMeta, BaseEstimator)):
         self.validation_steps = validation_steps
         self.verbose = verbose
         self.seed = seed
+        if not isinstance(tensorboard, bool):
+            raise ValueError(
+                "tensorboard must be a boolean, got %r" % (tensorboard,))
+        self.tensorboard = tensorboard
+        self.tensorboard_log_dir = tensorboard_log_dir
         self.fit_params = fit_params
 
         check_params(fit_params, Model.fit)
@@ -635,8 +758,74 @@ class BaseKerasModel(six.with_metaclass(ABCMeta, BaseEstimator)):
 
         return rval
 
+    def _resolve_tensorboard_log_dir(self):
+        """Return the TensorBoard root, or None when logging is off."""
+        if not self.tensorboard:
+            return None
+        log_dir = self.tensorboard_log_dir
+        if log_dir is None or log_dir == '':
+            log_dir = os.environ.get('GALAXY_ML_TENSORBOARD_LOG_DIR')
+        if log_dir is None or log_dir == '':
+            log_dir = DEFAULT_TENSORBOARD_LOG_DIR
+        return os.fspath(log_dir)
+
+    def _tensorboard_hparams(self):
+        """Hyperparameters that describe this fit."""
+        metrics = self.metrics
+        if isinstance(metrics, (list, tuple)):
+            metrics_text = ','.join(str(item) for item in metrics) or '(none)'
+        elif metrics:
+            metrics_text = str(metrics)
+        else:
+            metrics_text = '(none)'
+
+        hparams = {
+            'model_type': str(self.model_type),
+            'optimizer': str(self.optimizer),
+            'loss': '(none)' if self.loss is None else str(self.loss),
+            'metrics': metrics_text,
+            'epochs': int(self.epochs),
+            'batch_size': int(self.batch_size),
+            'validation_split': float(self.validation_split),
+        }
+        learning_rate = _plain_number(self.learning_rate)
+        if learning_rate is None:
+            learning_rate = _plain_number(
+                getattr(self._optimizer, 'learning_rate', None))
+        if learning_rate is not None:
+            hparams['learning_rate'] = learning_rate
+        return hparams
+
+    def _optional_tensorboard_callback(self, callbacks):
+        """Build a TensorBoard callback, unless logging is off.
+
+        An explicit TensorBoard callback in ``callbacks`` is left in
+        charge of its own log directory.
+        """
+        log_root = self._resolve_tensorboard_log_dir()
+        if log_root is None:
+            return None
+        if callbacks:
+            for callback in callbacks:
+                if isinstance(callback, TensorBoard):
+                    return None
+        run_dir = _new_tensorboard_run_dir(log_root)
+        return _GalaxyMLTensorBoard(
+            log_dir=str(run_dir),
+            hparams=self._tensorboard_hparams())
+
     @property
     def _callbacks(self):
+        """Callback list for ``fit``, including optional TensorBoard."""
+        callbacks = self._configured_callbacks()
+        tensorboard = self._optional_tensorboard_callback(callbacks)
+        if tensorboard is None:
+            return callbacks
+        if not callbacks:
+            return [tensorboard]
+        return list(callbacks) + [tensorboard]
+
+    def _configured_callbacks(self):
         """ return list of callback objects from parameters.
         suppose correct input format.
 
@@ -1188,6 +1377,11 @@ class KerasGBatchClassifier(KerasGClassifier):
         epoch. If > 0, log device placement
     seed : None or int, default None
         Backend random seed
+    tensorboard : bool, default False
+        When True, write TensorBoard event files during ``fit``.
+        See ``BaseKerasModel``.
+    tensorboard_log_dir : str or None, default "logs"
+        Root directory for TensorBoard runs. See ``BaseKerasModel``.
     n_jobs : int, default=1
     prediction_steps : None or int, default is None
         prediction steps. If None, it will be number of samples
@@ -1213,6 +1407,7 @@ class KerasGBatchClassifier(KerasGClassifier):
         epochs=1, batch_size=None, callbacks=None,
         validation_split=0., steps_per_epoch=None,
         validation_steps=None, verbose=1, seed=None,
+        tensorboard=False, tensorboard_log_dir=DEFAULT_TENSORBOARD_LOG_DIR,
         n_jobs=1, prediction_steps=None,
         class_positive_factor=1, **fit_params
     ):
@@ -1233,7 +1428,8 @@ class KerasGBatchClassifier(KerasGClassifier):
             validation_split=validation_split,
             steps_per_epoch=steps_per_epoch,
             validation_steps=validation_steps, verbose=verbose,
-            seed=seed, **fit_params)
+            seed=seed, tensorboard=tensorboard,
+            tensorboard_log_dir=tensorboard_log_dir, **fit_params)
 
         self.data_batch_generator = data_batch_generator
         self.n_jobs = n_jobs

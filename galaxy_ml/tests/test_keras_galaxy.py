@@ -310,6 +310,7 @@ def test_get_params_base_keras_model():
         'nesterov': None, 'optimizer': 'rmsprop', 'rho': None,
         'run_eagerly': None, 'seed': None,
         'steps_per_epoch': None, 'steps_per_execution': None,
+        'tensorboard': False, 'tensorboard_log_dir': 'logs',
         'validation_split': 0.1, 'validation_steps': None,
         'verbose': 1
     }
@@ -356,8 +357,8 @@ def test_get_params_keras_g_classifier():
         'learning_rate_power', 'loss', 'loss_weights', 'metrics',
         'model_type', 'momentum', 'nesterov', 'optimizer', 'rho',
         'run_eagerly', 'seed', 'steps_per_epoch',
-        'steps_per_execution', 'validation_split',
-        'validation_steps', 'verbose',
+        'steps_per_execution', 'tensorboard', 'tensorboard_log_dir',
+        'validation_split', 'validation_steps', 'verbose',
         'layers_1_Dense__config__kernel_initializer__config__seed',
         'layers_2_Dense__config__kernel_initializer__config__seed']
 
@@ -420,8 +421,8 @@ def test_get_params_keras_g_regressor():
         'learning_rate_power', 'loss', 'loss_weights', 'metrics',
         'model_type', 'momentum', 'nesterov', 'optimizer', 'rho',
         'run_eagerly', 'seed', 'steps_per_epoch',
-        'steps_per_execution', 'validation_split',
-        'validation_steps', 'verbose',
+        'steps_per_execution', 'tensorboard', 'tensorboard_log_dir',
+        'validation_split', 'validation_steps', 'verbose',
         'layers_1_Dense__config__kernel_initializer__config__seed',
         'layers_2_Dense__config__kernel_initializer__config__seed']
 
@@ -726,6 +727,7 @@ def test_keras_fasta_batch_classifier():
         'optimizer': 'rmsprop', 'prediction_steps': None,
         'rho': None, 'run_eagerly': None, 'seed': None,
         'steps_per_epoch': None, 'steps_per_execution': None,
+        'tensorboard': False, 'tensorboard_log_dir': 'logs',
         'validation_split': 0., 'validation_steps': None,
         'verbose': 0
     }
@@ -794,7 +796,8 @@ def test_keras_fasta_protein_batch_classifier():
         'n_jobs': 1, 'nesterov': None, 'optimizer': 'rmsprop',
         'prediction_steps': None, 'rho': None, 'run_eagerly': None,
         'seed': 0, 'steps_per_epoch': None,
-        'steps_per_execution': None, 'validation_split': 0,
+        'steps_per_execution': None, 'tensorboard': False,
+        'tensorboard_log_dir': 'logs', 'validation_split': 0,
         'validation_steps': None, 'verbose': 0}
     assert got == expect, got
 
