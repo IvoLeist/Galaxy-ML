@@ -195,6 +195,46 @@ grid = GridSearchCV(clf, param_grid={}, scoring=‘roc_auc’, cv=5, n_jobs=2)
 grid.fit(X, y)
 ```
 
+### Monitoring Keras training with TensorBoard
+
+`KerasGClassifier`, `KerasGRegressor`, and `KerasGBatchClassifier` can write
+TensorBoard event files during `fit`. Logging is off unless `tensorboard=True`,
+so existing training code is unchanged.
+
+Each fit records the metrics Keras already computes. Training scalars are
+written under `train` (`epoch_loss`, `epoch_<metric>` such as `epoch_accuracy`,
+and `epoch_learning_rate`). When `validation_split` or `validation_data` is
+used, the matching validation scalars are written under `validation`. The same
+run stores hyperparameters under `hparams/`: model type, optimizer, loss,
+metrics, learning rate, epochs, batch size, and validation split.
+
+```python
+classifier = KerasGClassifier(
+    config,
+    optimizer='adam',
+    loss='binary_crossentropy',
+    metrics=['accuracy'],
+    epochs=60,
+    tensorboard=True,
+    tensorboard_log_dir='logs',  # default
+)
+classifier.fit(X, y)
+```
+
+`tensorboard_log_dir` is the root directory. Every `fit` adds its own
+subdirectory, so later runs and parameter searches do not overwrite earlier
+curves. `None` or `""` uses the `GALAXY_ML_TENSORBOARD_LOG_DIR` environment
+variable when it is set, and otherwise `logs`.
+
+Launch TensorBoard from the environment where Galaxy-ML is installed:
+
+```sh
+tensorboard --logdir logs
+```
+
+Then open <http://localhost:6006>. Point `--logdir` at the same directory you
+passed as `tensorboard_log_dir`.
+
 ### Example for using Galaxy-ML to persist a sklearn/keras model
 
 ```
