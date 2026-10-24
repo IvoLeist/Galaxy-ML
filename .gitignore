@@ -29,3 +29,7 @@ dist/
 # Local Galaxy tool-test environment and dependency resolver
 .venv-tool-tests/
 .planemo-local/
+
+# TensorBoard event files
+logs/
+events.out.tfevents.*
