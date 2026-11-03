@@ -11,6 +11,7 @@ import tensorflow as tf
 from keras.callbacks import TensorBoard
 from keras.layers import Dense, Input
 from keras.models import Sequential
+from tensorboard.plugins.hparams import plugin_data_pb2
 
 from galaxy_ml.keras_galaxy_models import (
     KerasGBatchClassifier, KerasGClassifier, KerasGRegressor,
@@ -148,6 +149,38 @@ def test_tensorboard_logs_fit_metrics_and_hyperparameters(tmp_path):
         pytest.approx(0.25)
     assert scalars[('train', 'hparams/learning_rate')][0] == \
         pytest.approx(0.01)
+
+
+def test_tensorboard_registers_dynamic_hparams_metrics(tmp_path):
+    classifier = _classifier(
+        tensorboard=True, tensorboard_log_dir=str(tmp_path))
+
+    classifier.fit(*_xy())
+
+    experiments = []
+    for path in tmp_path.rglob('events.out.tfevents.*'):
+        for event in tf.compat.v1.train.summary_iterator(str(path)):
+            for value in event.summary.value:
+                if value.tag == '_hparams_/experiment':
+                    data = plugin_data_pb2.HParamsPluginData.FromString(
+                        value.metadata.plugin_data.content)
+                    assert data.HasField('experiment')
+                    experiments.append(data.experiment)
+
+    assert experiments, 'No HParams experiment configuration was logged'
+    expected = {
+        ('train', 'epoch_loss'),
+        ('train', 'epoch_accuracy'),
+        ('validation', 'epoch_loss'),
+        ('validation', 'epoch_accuracy'),
+        ('train', 'epoch_learning_rate'),
+    }
+    for experiment in experiments:
+        registered = {
+            (metric.name.group, metric.name.tag)
+            for metric in experiment.metric_infos
+        }
+        assert expected <= registered
 
 
 def test_tensorboard_log_dir_falls_back_to_default(tmp_path, monkeypatch):

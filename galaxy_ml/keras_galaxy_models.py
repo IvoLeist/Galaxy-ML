@@ -200,14 +200,25 @@ class _GalaxyMLTensorBoard(TensorBoard):
             profile_batch=0,
             **kwargs)
         self.hparams = dict(hparams or {})
+        self._hparams_setup = None
 
     def on_train_begin(self, logs=None):
+        self._hparams_setup = None
         super(_GalaxyMLTensorBoard, self).on_train_begin(logs)
         self._write_hparams()
+
+    def on_epoch_end(self, epoch, logs=None):
+        super(_GalaxyMLTensorBoard, self).on_epoch_end(epoch, logs)
+
+        # Register HParams metrics after the first epoch, when
+        # the actual metric names are available.
+        if self._hparams_setup is not None:
+            self._register_hparams_metrics(logs or {})
 
     def _write_hparams(self):
         if not self.hparams:
             return
+
         try:
             from tensorboard.plugins.hparams import api as hp
         except ImportError:
@@ -215,45 +226,90 @@ class _GalaxyMLTensorBoard(TensorBoard):
 
         session = {}
         specs = []
+
         with self._train_writer.as_default():
             for key, value in self.hparams.items():
                 tag = 'hparams/%s' % key
+
                 if isinstance(value, bool):
                     tf.summary.scalar(tag, float(value), step=0)
                     session[key] = bool(value)
+
                     if hp is not None:
                         specs.append(hp.HParam(
                             key, hp.Discrete([False, True])))
+
                 elif isinstance(value, (int, float)):
                     number = float(value)
                     tf.summary.scalar(tag, number, step=0)
                     session[key] = number
+
                     if hp is not None:
                         specs.append(hp.HParam(
                             key, hp.RealInterval(-1e9, 1e9)))
+
                 else:
                     text = str(value)
                     tf.summary.text(tag, text, step=0)
                     session[key] = text
+
                     if hp is not None:
-                        specs.append(hp.HParam(key, hp.Discrete([text])))
+                        specs.append(hp.HParam(
+                            key, hp.Discrete([text])))
+
             self._train_writer.flush()
 
-        if hp is None or not specs:
-            return
+        if hp is not None and specs:
+            self._hparams_setup = (hp, specs, session)
+
+    def _register_hparams_metrics(self, logs):
+        """Register the metrics actually produced by Keras."""
+
+        hp, specs, session = self._hparams_setup
+
+        # Only register once per fit.
+        self._hparams_setup = None
+
+        metrics = []
+
+        for name in logs:
+            if name.startswith('val_'):
+                group = 'validation'
+                metric_name = name[4:]
+            else:
+                group = 'train'
+                metric_name = name
+
+            metrics.append(
+                hp.Metric(
+                    'epoch_%s' % metric_name,
+                    group=group,
+                    display_name='%s %s' % (
+                        group.capitalize(),
+                        metric_name.replace('_', ' ')),
+                )
+            )
+
+        # Keras TensorBoard also logs the optimizer learning rate.
+        if getattr(self.model.optimizer, 'learning_rate', None) is not None:
+            if 'learning_rate' not in logs:
+                metrics.append(
+                    hp.Metric(
+                        'epoch_learning_rate',
+                        group='train',
+                        display_name='Training learning rate',
+                    )
+                )
+
         try:
             with self._train_writer.as_default():
                 hp.hparams_config(
                     hparams=specs,
-                    metrics=[
-                        hp.Metric('epoch_loss', display_name='loss'),
-                        hp.Metric(
-                            'epoch_learning_rate',
-                            display_name='learning rate'),
-                    ],
+                    metrics=metrics,
                 )
                 hp.hparams(session)
                 self._train_writer.flush()
+
         except Exception as exc:
             warnings.warn(
                 'Could not write TensorBoard hyperparameter summaries: %s'
