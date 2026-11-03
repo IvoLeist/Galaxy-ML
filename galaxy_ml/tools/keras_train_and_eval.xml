@@ -40,6 +40,11 @@
             --groups '$experiment_schemes.test_split.split_algos.groups_selector.infile_g'
             #end if
 
+            #if $save and 'save_tensorboard' in str($save)
+            && mkdir -p logs
+            && python -m zipfile -c '$outfile_tensorboard' logs
+            #end if
+
         ]]>
     </command>
     <configfiles>
@@ -80,6 +85,7 @@
         <expand macro="sl_mixed_input_plus_sequence" />
         <param name="save" type="select" multiple='true' display="checkboxes" label="Save the fitted model" optional="true" help="Evaluation scores will be output by default.">
             <option value="save_estimator" selected="true">Fitted estimator</option>
+            <option value="save_tensorboard">TensorBoard logs (requires a TensorBoard callback)</option>
             <option value="save_prediction">True labels and prediction results from evaluation for downstream analysis</option>
         </param>
     </inputs>
@@ -93,6 +99,9 @@
         </data>
         <data format="tabular" name="outfile_y_preds" label="All predictions on ${on_string}">
             <filter>str(save) and 'save_prediction' in str(save)</filter>
+        </data>
+        <data format="zip" name="outfile_tensorboard" label="TensorBoard logs on ${on_string}">
+            <filter>str(save) and 'save_tensorboard' in str(save)</filter>
         </data>
     </outputs>
     <tests>

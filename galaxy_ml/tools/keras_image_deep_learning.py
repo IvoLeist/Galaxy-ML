@@ -24,7 +24,7 @@ IMAGES_DIR = __import__('os').path.join(WORKING_DIR, 'images')
 NON_SEARCHABLE = ('n_jobs', 'pre_dispatch', 'memory', '_path', '_dir',
                   'nthread', 'callbacks')
 ALLOWED_CALLBACKS = ('EarlyStopping', 'TerminateOnNaN', 'ReduceLROnPlateau',
-                     'CSVLogger', 'None')
+                     'CSVLogger', 'TensorBoard', 'None')
 
 
 def _eval_swap_params(params_builder):

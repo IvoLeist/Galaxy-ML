@@ -670,7 +670,7 @@ class BaseKerasModel(six.with_metaclass(ABCMeta, BaseEstimator)):
                     params['filepath'] = curr_dir / filename
             elif callback_type == 'TensorBoard':
                 if not params.get('log_dir', None):
-                    params['log_dir'] = curr_dir.joinpath('logs')
+                    params['log_dir'] = str(curr_dir.joinpath('logs'))
             elif callback_type == 'CSVLogger':
                 if not params:
                     params['filename'] = curr_dir.joinpath('log.csv')

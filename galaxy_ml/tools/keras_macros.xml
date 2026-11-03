@@ -719,7 +719,7 @@
         <param name="callback_type" type="select" label="Choose a callback">
           <option value="None" selected="true">None</option>
           <option value="EarlyStopping">EarlyStopping -- Stop training when a monitored quantity has stopped improving</option>
-          <!--option value="KerasTensorBoard">TensorBoard</option-->
+          <option value="TensorBoard">TensorBoard -- Log training and validation metrics</option>
           <!--option value="KerasLearningRateScheduler">LearningRateScheduler</option-->
           <!--option value="RemoteMonitor">RemoteMonitor - Stream events to a server</option> -->
           <!--option value="ModelCheckpoint">ModelCheckpoint - Save the model after every epoch</option>-->
@@ -736,17 +736,14 @@
             <param argument="restore_best_weights" type="boolean" truevalue="booltrue" falsevalue="boolfalse" checked="false" help="Whether to restore model weights from the epoch with the best value of the monitored quantity" />
           </expand>
         </when>
-        <!--when value="TensorBoard">
-          <param argument="histogram_freq" />
-          <param argument="batch_size" />
-          <param argument="write_graph" />
-          <param argument="write_grads" />
-          <param argument="write_images" />
-          <param argument="embeddings_layer_names" />
-          <param argument="embeddings_metadata" />
-          <param argument="embeddings_data" />
-          <param argument="update_freq" />
-        </when-->
+        <when value="TensorBoard">
+          <param argument="histogram_freq" type="integer" value="0" min="0" help="Epoch interval for weight histograms; 0 disables histograms." />
+          <param argument="write_images" type="boolean" truevalue="booltrue" falsevalue="boolfalse" checked="false" help="Write model weights as images." />
+          <param argument="update_freq" type="select" help="How often to log metrics. Batch logging can slow training.">
+            <option value="epoch" selected="true">Each epoch</option>
+            <option value="batch">Each batch</option>
+          </param>
+        </when>
         <!--when value="RemoteMonitor">
           <param argument="root" type="text" value="http://localhost:9000" help="Root url of the target server." />
           <param argument="path" type="text" value="/publish/epoch/end/" help="Path relative to root to which the events will be sent. E.g., root + '/publish/epoch/end/'" />

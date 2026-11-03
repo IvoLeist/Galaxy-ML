@@ -68,6 +68,48 @@ A typic machine learning pipeline is composed of a main estimator/model and opti
 - ImageDataFrameBatchGenerator
 
 
+### TensorBoard logging
+
+Choose the **TensorBoard** callback when configuring a Keras model in Galaxy.
+It records training and validation loss and metrics each epoch. Weight
+histograms and batch logging are optional. In **Deep learning training and
+evaluation** or **Image Deep Learning**, select **TensorBoard logs** in the
+save options to download a ZIP archive. Extract it and run:
+
+```sh
+tensorboard --logdir logs
+```
+
+Open the local URL printed by TensorBoard. The archive contains no events if
+the model has no TensorBoard callback. Galaxy keeps logs in the job directory
+and resets any log directory saved in an imported model.
+
+For Python use, configure a `KerasGClassifier`, `KerasGRegressor`, or
+`KerasGBatchClassifier` through its existing `callbacks` parameter:
+
+```python
+estimator.set_params(callbacks=[{
+    'callback_selection': {
+        'callback_type': 'TensorBoard',
+        'log_dir': 'logs/experiment-1',
+        'histogram_freq': 0,
+        'update_freq': 'epoch',
+    }
+}])
+estimator.fit(X_train, y_train, validation_data=(X_val, y_val))
+```
+
+Omitting `log_dir` uses `logs` in the current directory. Use separate directories
+for separate experiments. Logging is disabled unless the callback is selected.
+TensorBoard is included with the TensorFlow dependency.
+
+Run the focused tests from the repository root in an environment with the
+project installed and pytest available:
+
+```sh
+python -m pytest -q galaxy_ml/tests/test_tensorboard.py
+```
+
 ### Installation
 
 This source version targets Python 3.12. Dependency versions are pinned in

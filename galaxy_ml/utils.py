@@ -515,7 +515,7 @@ def clean_params(estimator, n_jobs=None):
     Cleaned estimator object
     """
     ALLOWED_CALLBACKS = ('EarlyStopping', 'TerminateOnNaN',
-                         'ReduceLROnPlateau', 'CSVLogger', 'None')
+                         'ReduceLROnPlateau', 'CSVLogger', 'TensorBoard', 'None')
 
     estimator_params = estimator.get_params()
 
@@ -538,6 +538,9 @@ def clean_params(estimator, n_jobs=None):
                 if cb_type not in ALLOWED_CALLBACKS:
                     raise ValueError(
                         "Prohibited callback type: %s!" % cb_type)
+                if cb_type == 'TensorBoard':
+                    # Keep logs inside the Galaxy job working directory.
+                    cb['callback_selection']['log_dir'] = None
 
     return estimator
 

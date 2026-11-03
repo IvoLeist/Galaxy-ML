@@ -33,7 +33,7 @@ CACHE_DIR = os.path.join(os.getcwd(), 'cached')
 NON_SEARCHABLE = ('n_jobs', 'pre_dispatch', 'memory', '_path', '_dir',
                   'nthread', 'callbacks')
 ALLOWED_CALLBACKS = ('EarlyStopping', 'TerminateOnNaN', 'ReduceLROnPlateau',
-                     'CSVLogger', 'None')
+                     'CSVLogger', 'TensorBoard', 'None')
 
 
 def _eval_swap_params(params_builder):
