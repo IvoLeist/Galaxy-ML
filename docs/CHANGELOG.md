@@ -1,5 +1,8 @@
 ### Version 0.11.0 (unreleased)
 
+- Optionally log Keras training and validation metrics, learning rate, and
+  fit hyperparameters to TensorBoard (`tensorboard=True`; log directory
+  defaults to `logs`).
 - Target Python 3.12 across package metadata, CI, Docker and Galaxy tools.
 - Update the compatible dependency stack to TensorFlow/Keras 2.12,
   scikit-learn 1.2, NumPy 1.23 and pandas 1.5.
