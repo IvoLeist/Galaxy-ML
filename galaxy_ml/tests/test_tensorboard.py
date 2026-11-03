@@ -178,8 +178,8 @@ def test_tensorboard_registers_dynamic_hparams_metrics(tmp_path, metric):
     }
     for experiment in experiments:
         registered = {
-            (metric.name.group, metric.name.tag)
-            for metric in experiment.metric_infos
+            (metric_info.name.group, metric_info.name.tag)
+            for metric_info in experiment.metric_infos
         }
         assert expected <= registered
         if metric != 'accuracy':
