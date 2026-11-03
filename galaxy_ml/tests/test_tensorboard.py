@@ -151,9 +151,10 @@ def test_tensorboard_logs_fit_metrics_and_hyperparameters(tmp_path):
         pytest.approx(0.01)
 
 
-def test_tensorboard_registers_dynamic_hparams_metrics(tmp_path):
+@pytest.mark.parametrize('metric', ['accuracy', 'mean_absolute_error'])
+def test_tensorboard_registers_dynamic_hparams_metrics(tmp_path, metric):
     classifier = _classifier(
-        tensorboard=True, tensorboard_log_dir=str(tmp_path))
+        metrics=[metric], tensorboard=True, tensorboard_log_dir=str(tmp_path))
 
     classifier.fit(*_xy())
 
@@ -170,9 +171,9 @@ def test_tensorboard_registers_dynamic_hparams_metrics(tmp_path):
     assert experiments, 'No HParams experiment configuration was logged'
     expected = {
         ('train', 'epoch_loss'),
-        ('train', 'epoch_accuracy'),
+        ('train', 'epoch_' + metric),
         ('validation', 'epoch_loss'),
-        ('validation', 'epoch_accuracy'),
+        ('validation', 'epoch_' + metric),
         ('train', 'epoch_learning_rate'),
     }
     for experiment in experiments:
@@ -181,6 +182,9 @@ def test_tensorboard_registers_dynamic_hparams_metrics(tmp_path):
             for metric in experiment.metric_infos
         }
         assert expected <= registered
+        if metric != 'accuracy':
+            assert ('train', 'epoch_accuracy') not in registered
+            assert ('validation', 'epoch_accuracy') not in registered
 
 
 def test_tensorboard_log_dir_falls_back_to_default(tmp_path, monkeypatch):
